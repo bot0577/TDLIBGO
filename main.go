@@ -292,9 +292,10 @@ func handleAuthCode(c *gin.Context) {
 	}
 
 	log.Printf("[auth/code] account=%s phone=%s code_hash_len=%d hash=%s", req.Account, phone, len(codeHash), maskHash(codeHash))
-	// 与发送验证码时一致，直接使用规范化后的手机号（纯数字）
-	log.Printf("[auth/code] debug submit => phone=%s codeHash(raw)=%s code=%s", phone, codeHash, code)
-	_, err = acc.tgClient.Auth().SignIn(acc.runCtx, phone, codeHash, code)
+	// Telegram SignIn 不接受带 "+" 的手机号，这里去掉前导 "+" 再提交
+	phoneForSignIn := strings.TrimPrefix(strings.TrimSpace(phone), "+")
+	log.Printf("[auth/code] debug submit => phone=%s phone_for_signin=%s codeHash(raw)=%s code=%s", phone, phoneForSignIn, codeHash, code)
+	_, err = acc.tgClient.Auth().SignIn(acc.runCtx, phoneForSignIn, codeHash, code)
 	if err != nil {
 		if strings.Contains(err.Error(), "SESSION_PASSWORD_NEEDED") {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "需要二步验证密码", "need_password": true})
@@ -473,7 +474,7 @@ func maskHash(h string) string {
 
 func normalizePhone(p string) string {
 	p = strings.TrimSpace(p)
-	// 只保留数字，Telegram 后端接受纯数字（不带 +），避免用户多输 + 号导致格式异常
+	// 只保留数字，并统一添加 "+" 前缀，避免用户多输 + 号导致格式异常
 	var b strings.Builder
 	for _, r := range p {
 		if r >= '0' && r <= '9' {
@@ -484,5 +485,5 @@ func normalizePhone(p string) string {
 	if digits == "" {
 		return ""
 	}
-	return digits
+	return "+" + digits
 }
