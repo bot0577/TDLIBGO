@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <title>TDLib 控制台</title>
+  <style>
+    body { font-family: Arial, sans-serif; max-width: 900px; margin: 24px auto; }
+    section { border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+    h2 { margin: 0 0 12px; }
+    label { display: block; margin: 6px 0; }
+    input, button, select { padding: 6px; margin-right: 6px; }
+    pre { background: #f7f7f7; padding: 12px; border-radius: 6px; max-height: 400px; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>TDLib 控制台</h1>
+
+  <section>
+    <h2>服务配置</h2>
+    <label>API 地址：<input id="baseUrl" size="50" value="http://192.168.3.66:8800" /></label>
+    <label>账号标识（自定义，例如 acc1 / acc2）：<input id="account" size="16" value="acc1" /></label>
+    <button onclick="health()">健康检查 /health</button>
+  </section>
+
+  <section>
+    <h2>登录流程</h2>
+    <ol>
+      <li>输入手机号，点“发送验证码”。</li>
+      <li>收到短信后，输入验证码点“提交验证码”。</li>
+      <li>若提示需要二步验证密码，输入密码点“提交二步验证密码”。</li>
+    </ol>
+    <label>手机号：<input id="phone" placeholder="+1xxxxxxxxxx" size="20" /></label>
+    <button onclick="start()">发送验证码 /auth/start</button>
+    <label>验证码：<input id="code" placeholder="收到的验证码" size="10" /></label>
+    <button onclick="verify()">提交验证码 /auth/code</button>
+    <label>二步验证密码：<input id="password" type="password" placeholder="如果账号开启了二步验证" size="20" /></label>
+    <button onclick="submitPassword()">提交二步验证密码 /auth/password</button>
+  </section>
+
+  <section>
+    <h2>账号与会话</h2>
+    <button onclick="getMe()">获取账号信息 /me</button>
+    <label>Limit：<input id="limit" type="number" value="50" min="1" max="200" /></label>
+    <button onclick="getChats()">获取对话列表 /chats</button>
+    <button onclick="listAccounts()">查看已创建账号 /accounts</button>
+    <button onclick="resetAccount()" style="margin-left:6px;color:#fff;background:#c0392b;">重置账号 /account/reset</button>
+  </section>
+
+  <section>
+    <h2>响应输出</h2>
+    <pre id="output">等待操作...</pre>
+    <button onclick="log('已清空')">清空输出</button>
+  </section>
+
+  <section>
+    <h2>请求历史</h2>
+    <div id="history">暂无记录</div>
+    <button onclick="clearHistory()">清空历史</button>
+  </section>
+
+<script>
+  const out = document.getElementById('output');
+  const baseInput = document.getElementById('baseUrl');
+  const historyDiv = document.getElementById('history');
+  const historyData = [];
+
+  function log(obj) {
+    out.textContent = typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2);
+  }
+  function pushHistory(entry) {
+    historyData.unshift(entry);
+    renderHistory();
+  }
+  function renderHistory() {
+    historyDiv.innerHTML = historyData.length === 0 ? '暂无记录' :
+      historyData.map((h, idx) => `<details ${idx === 0 ? 'open' : ''}>
+        <summary>${h.time} ${h.method} ${h.path} (status ${h.status})</summary>
+        <pre>${h.req ? JSON.stringify(h.req, null, 2) : ''}</pre>
+        <pre>${typeof h.resp === 'string' ? h.resp : JSON.stringify(h.resp, null, 2)}</pre>
+      </details>`).join('');
+  }
+  function clearHistory() {
+    historyData.length = 0;
+    renderHistory();
+  }
+
+  async function req(path, opts = {}) {
+    const base = baseInput.value.replace(/\/$/, '');
+    const url = base + path;
+    const reqBody = opts.body ? JSON.parse(opts.body) : undefined;
+    const resp = await fetch(url, Object.assign({
+      headers: { 'Content-Type': 'application/json' }
+    }, opts));
+    const text = await resp.text();
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = text;
+    }
+    pushHistory({
+      time: new Date().toLocaleTimeString(),
+      method: opts.method || 'GET',
+      path,
+      status: resp.status,
+      req: reqBody,
+      resp: parsed,
+    });
+    return { status: resp.status, body: parsed };
+  }
+  async function health() {
+    const r = await req('/health');
+    log(r);
+  }
+  function getAccount() {
+    return document.getElementById('account').value.trim();
+  }
+
+  async function start() {
+    const account = getAccount();
+    const phone = document.getElementById('phone').value.trim();
+    if (!account) return log('请填写账号标识');
+    if (!phone) return log('请填写手机号');
+    const r = await req('/auth/start', { method: 'POST', body: JSON.stringify({ account, phone }) });
+    log(r);
+  }
+  async function verify() {
+    const account = getAccount();
+    const code = document.getElementById('code').value.trim();
+    if (!account) return log('请填写账号标识');
+    if (!code) return log('请填写验证码');
+    const r = await req('/auth/code', { method: 'POST', body: JSON.stringify({ account, code }) });
+    log(r);
+    if (r.body && r.body.need_password) {
+      log({ status: '需要二步验证密码', detail: r.body });
+    }
+  }
+  async function submitPassword() {
+    const account = getAccount();
+    const password = document.getElementById('password').value.trim();
+    if (!account) return log('请填写账号标识');
+    if (!password) return log('请填写二步验证密码');
+    const r = await req('/auth/password', { method: 'POST', body: JSON.stringify({ account, password }) });
+    log(r);
+  }
+  async function getMe() {
+    const account = getAccount();
+    if (!account) return log('请填写账号标识');
+    const r = await req('/me?account=' + encodeURIComponent(account));
+    log(r);
+  }
+  async function getChats() {
+    const account = getAccount();
+    const limit = document.getElementById('limit').value || 50;
+    if (!account) return log('请填写账号标识');
+    const r = await req('/chats?account=' + encodeURIComponent(account) + '&limit=' + encodeURIComponent(limit));
+    log(r);
+  }
+  async function listAccounts() {
+    const r = await req('/accounts');
+    log(r);
+  }
+  async function resetAccount() {
+    const account = getAccount();
+    if (!account) return log('请填写账号标识');
+    const r = await req('/account/reset', { method: 'POST', body: JSON.stringify({ account }) });
+    log(r);
+  }
+</script>
+</body>
+</html>

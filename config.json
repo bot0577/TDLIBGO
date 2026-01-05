@@ -1,0 +1,19 @@
+{
+  "apiId": 37620312,
+  "apiHash": "1a63e07f480cd663c068ff1fb7275c66",
+  "dataDir": "D:/vmshare/tdlib_data",
+  "logFile": "D:/vmshare/tdlib_data/tdlib.log",
+  "logLevel": 1,
+  "proxy": {
+    "enabled": false,
+    "type": "socks5",
+    "host": "192.168.3.66",
+    "port": 7890,
+    "username": "",
+    "password": ""
+  },
+  "listen": {
+    "host": "192.168.3.66",
+    "port": 8800
+  }
+}
